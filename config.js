@@ -124,6 +124,7 @@ Optional Variables:
 , debug: true
 , influxdb: {
     host: 'influxdb',
-    database: 'statsd'
+    database: 'statsd',
+    version: 1.5
   }
 }

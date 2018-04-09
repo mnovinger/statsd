@@ -90,12 +90,18 @@ function InfluxdbBackend(startupTime, config, events) {
     }
   }
 
-  if (self.version >= 0.9) {
+  if (self.version === 0.9) {
     self.assembleEvent = self.assembleEvent_v09;
     self.httpPOST = self.httpPOST_v09;
+      self.log('Using InfluxDB version 0.9 protocol');
+  } else if (self.version >= 0.9) {
+      self.assembleEvent = self.assembleEvent_v15;
+      self.httpPOST = self.httpPOST_v15;
+      self.log('Using InfluxDB version 1.5 (1.x) protocol');
   } else {
     self.assembleEvent = self.assembleEvent_v08;
     self.httpPOST = self.httpPOST_v08;
+      self.log('Using InfluxDB version 0.8 protocol');
   }
 
   if (self.proxyEnable) {
@@ -402,6 +408,12 @@ InfluxdbBackend.prototype.assembleEvent_v09 = function (name, events) {
   return payload;
 }
 
+InfluxdbBackend.prototype.assembleEvent_v15 = function (name, events) {
+  if (events.length > 0) {
+      return `${name} value=${events[0].value} ${events[0].time}`
+  }
+}
+
 InfluxdbBackend.prototype.httpPOST_v08 = function (points) {
   /* Do not send if there are no points. */
   if (!points.length) { return; }
@@ -514,6 +526,71 @@ InfluxdbBackend.prototype.httpPOST_v09 = function (points) {
 
   req.write(payload);
   req.end();
+}
+
+InfluxdbBackend.prototype.httpPOST_v15 = function (points) {
+    /* Do not send if there are no points. */
+    if (!points.length) { return; }
+
+    var self = this,
+        query = {u: self.user, p: self.pass},
+        protocolName = self.protocol == http ? 'HTTP' : 'HTTPS',
+        startTime;
+
+    self.logDebug(function () {
+        return 'Sending ' + points.length + ' different points via ' + protocolName;
+    });
+
+    self.influxdbStats.numStats = points.length;
+
+    // var payload = JSON.stringify(points);
+    var payload = points.reduce((acc, point) => {return acc+`${point} \n`},"")
+
+    var options = {
+        hostname: self.host,
+        port: self.port,
+        path: `/write?db=${self.database}`,
+        method: 'POST',
+        agent: false, // Is it okay to use "undefined" here? (keep-alive)
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': Buffer.byteLength(payload)
+        }
+    };
+
+    var req = self.protocol.request(options);
+
+    req.on('socket', function (res) {
+        startTime = process.hrtime();
+    });
+
+    req.on('response', function (res) {
+        var status = res.statusCode;
+
+        self.influxdbStats.httpResponseTime = millisecondsSince(startTime);
+
+        if (status >= 400) {
+            self.log(protocolName + ' Error: ' + status);
+        }
+    });
+
+    req.on('error', function (e, i) {
+        self.log(e);
+    });
+
+
+
+    self.influxdbStats.payloadSize = Buffer.byteLength(payload);
+
+    self.logDebug(function () {
+        var size = (self.influxdbStats.payloadSize / 1024).toFixed(2);
+        return 'Payload size ' + size + ' KB';
+    });
+
+    // self.logDebug(payload)
+
+    req.write(payload);
+    req.end();
 }
 
 InfluxdbBackend.prototype.configCheck = function () {
