@@ -409,8 +409,10 @@ InfluxdbBackend.prototype.assembleEvent_v09 = function (name, events) {
 }
 
 InfluxdbBackend.prototype.assembleEvent_v15 = function (name, events) {
-  if (events.length > 0) {
-      return `${name} value=${events[0].value} ${events[0].time}`
+  if (events.length > 0 && name !== undefined) {
+     // prefix.agent.browser.label.run.measurement*
+      var parts = name.split(".");
+      return `${parts[5]},agent=${parts[1]},browser=${parts[2]},label=${parts[3]},run=${parts[4]} value=${events[0].value} ${events[0].time}`
   }
 }
 
@@ -549,7 +551,7 @@ InfluxdbBackend.prototype.httpPOST_v15 = function (points) {
     var options = {
         hostname: self.host,
         port: self.port,
-        path: `/write?db=${self.database}`,
+        path: `/write?db=${self.database}&precision=ms`,
         method: 'POST',
         agent: false, // Is it okay to use "undefined" here? (keep-alive)
         headers: {

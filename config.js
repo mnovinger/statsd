@@ -121,7 +121,7 @@ Optional Variables:
 {
   port: 8125
 , backends: [ "./backends/console", "./backends/influxdb" ]
-, debug: true
+// , debug: true
 , influxdb: {
     host: 'influxdb',
     database: 'statsd',
